@@ -431,12 +431,16 @@ export class Replayer {
         const target = (mirror.getNode(d.id) as Node) as HTMLElement;
         switch (d.type) {
           case MouseInteractions.Blur:
-            target.blur();
+            if(target.blur) {
+              target.blur();
+            }
             break;
           case MouseInteractions.Focus:
-            target.focus({
-              preventScroll: true,
-            });
+            if(target.focus) {
+              target.focus({
+                preventScroll: true,
+              });
+            }
             break;
           case MouseInteractions.Click:
             /**
