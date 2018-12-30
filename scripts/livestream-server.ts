@@ -49,10 +49,32 @@ app.get('/', (req, res) => {
 
 // Custom broadcast.js file transmits to predefined websocket
 app.get('/:streamId/broadcast.js', (req, res) => res.contentType('text/javascript').send(`
-  ${fs.readFileSync(path.resolve(__dirname, '../dist/rrweb.min.js'), 'utf8')}
-  (new WebSocket('ws${req.hostname === 'localhost' ? '' : 's'}://${req.hostname}${req.hostname === 'localhost' ? `:${port}` : ''}/${req.params.streamId}/websocket')).addEventListener('open', function(socketevent) {
-    rrweb.record({ emit: function(rrwebevent) { socketevent.target.send(JSON.stringify(rrwebevent)); } });
-  });
+  (function() {
+    var firstScript = document.getElementsByTagName('script')[0];
+    var newScript = document.createElement('script');
+    var scriptLoaded = false;
+    newScript.async = true;
+    newScript.onload = function() {
+      scriptLoaded = true;
+    };
+    newScript.src = '//${req.hostname}${req.hostname === 'localhost' ? `:${port}` : ''}/rrweb.min.js';
+    firstScript.parentNode.insertBefore(newScript, firstScript);
+    var websocket = new WebSocket('ws${req.hostname === 'localhost' ? '' : 's'}://${req.hostname}${req.hostname === 'localhost' ? `:${port}` : ''}/${req.params.streamId}/websocket');
+    websocket.addEventListener('open', function(socketevent) {
+      var startRecord = function() {
+        rrweb.record({
+          emit: function(rrwebevent) {
+            socketevent.target.send(JSON.stringify(rrwebevent));
+          }
+        });
+      };
+      if(scriptLoaded) {
+        startRecord();
+      } else {
+        newScript.onload = startRecord;
+      }
+    });
+  })();
 `));
 
 // WebSocket endpoint is bi-directional: No difference between broadcaster and watcher
