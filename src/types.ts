@@ -1,4 +1,4 @@
-import { serializedNodeWithId, idNodeMap, INode } from 'rrweb-snapshot';
+import { serializedNodeWithId, idNodeMap, INode, mediaState } from 'rrweb-snapshot';
 
 export enum EventType {
   DomContentLoaded,
@@ -50,6 +50,7 @@ export enum IncrementalSource {
   Scroll,
   ViewportResize,
   Input,
+  Media,
 }
 
 export type mutationData = {
@@ -78,13 +79,19 @@ export type inputData = {
   id: number;
 } & inputValue;
 
+export type mediaData = {
+  source: IncrementalSource.Media;
+  id: number;
+} & mediaState;
+
 export type incrementalData =
   | mutationData
   | mousemoveData
   | mouseInteractionData
   | scrollData
   | viewportResizeData
-  | inputData;
+  | inputData
+  | mediaData;
 
 export type event =
   | domContentLoadedEvent
@@ -109,6 +116,7 @@ export type observerParam = {
   scrollCb: scrollCallback;
   viewportResizeCb: viewportResizeCallback;
   inputCb: inputCallback;
+  mediaCb: mediaCallback;
 };
 
 export type textCursor = {
@@ -207,6 +215,8 @@ export type inputValue = {
 };
 
 export type inputCallback = (v: inputValue & { id: number }) => void;
+
+export type mediaCallback = (s: mediaState & { id: number }) => void;
 
 export type Mirror = {
   map: idNodeMap;

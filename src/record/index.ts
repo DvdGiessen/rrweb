@@ -125,6 +125,16 @@ function record(options: recordOptions = {}): listenerHandler | undefined {
                 },
               }),
             ),
+          mediaCb: s =>
+            emit(
+              wrapEvent({
+                type: EventType.IncrementalSnapshot,
+                data: {
+                  source: IncrementalSource.Media,
+                  ...s,
+                },
+              }),
+            ),
         }),
       );
     };

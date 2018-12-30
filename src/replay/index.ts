@@ -524,6 +524,37 @@ export class Replayer {
         }
         break;
       }
+      case IncrementalSource.Media: {
+        /**
+         * Input event on an unserialized node usually means the event
+         * was synchrony triggered programmatically after the node was
+         * created. This means there was not an user observable interaction
+         * and we do not need to replay it.
+         */
+        if (d.id === -1) {
+          break;
+        }
+        const target: HTMLMediaElement = (mirror.getNode(
+          d.id,
+        ) as Node) as HTMLMediaElement;
+        try {
+          // TODO: check how close currenttime is.
+          // if it's very close, ignore the change
+          // if it's reasonably close, instead temporarily adjust playbackrate to make it catch up
+          // only if it's significantly different, jump
+          if (d.paused) {
+            target.pause();
+          } else {
+            target.play();
+          }
+          target.currentTime = d.currentTime;
+          target.playbackRate = d.playbackRate;
+          target.volume = d.volume;
+        } catch (error) {
+          // for safe
+        }
+        break;
+      }
       default:
     }
   }

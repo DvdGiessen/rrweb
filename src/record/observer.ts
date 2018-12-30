@@ -1,4 +1,4 @@
-import { INode, serializeNodeWithId } from 'rrweb-snapshot';
+import { INode, serializeNodeWithId, mediaState } from 'rrweb-snapshot';
 import {
   mirror,
   throttle,
@@ -22,6 +22,7 @@ import {
   viewportResizeCallback,
   inputValue,
   inputCallback,
+  mediaCallback,
   hookResetter,
   textCursor,
   attributeCursor,
@@ -325,13 +326,13 @@ function initViewportResizeObserver(
 }
 
 const INPUT_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
-const HOOK_PROPERTIES: Array<[HTMLElement, string]> = [
+const INPUT_HOOK_PROPERTIES: Array<[HTMLElement, string]> = [
   [HTMLInputElement.prototype, 'value'],
   [HTMLInputElement.prototype, 'checked'],
   [HTMLSelectElement.prototype, 'value'],
   [HTMLTextAreaElement.prototype, 'value'],
 ];
-const IGNORE_CLASS = 'rr-ignore';
+const INPUT_IGNORE_CLASS = 'rr-ignore';
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
 function initInputObserver(cb: inputCallback): listenerHandler {
   function eventHandler(event: Event) {
@@ -347,7 +348,7 @@ function initInputObserver(cb: inputCallback): listenerHandler {
     const type: string | undefined = (target as HTMLInputElement).type;
     if (
       type === 'password' ||
-      (target as HTMLElement).classList.contains(IGNORE_CLASS)
+      (target as HTMLElement).classList.contains(INPUT_IGNORE_CLASS)
     ) {
       return;
     }
@@ -398,7 +399,84 @@ function initInputObserver(cb: inputCallback): listenerHandler {
   );
   if (propertyDescriptor && propertyDescriptor.set) {
     handlers.push(
-      ...HOOK_PROPERTIES.map(p =>
+      ...INPUT_HOOK_PROPERTIES.map(p =>
+        hookSetter<HTMLElement>(p[0], p[1], {
+          set() {
+            // mock to a normal event
+            eventHandler({ target: this } as Event);
+          },
+        }),
+      ),
+    );
+  }
+  return () => {
+    handlers.forEach(h => h());
+  };
+}
+
+const MEDIA_TAGS = ['AUDIO', 'VIDEO'];
+const MEDIA_HOOK_PROPERTIES: Array<[HTMLElement, string]> = [
+  [HTMLMediaElement.prototype, 'controls'],
+  [HTMLMediaElement.prototype, 'currentTime'],
+  [HTMLMediaElement.prototype, 'loop'],
+  [HTMLMediaElement.prototype, 'muted'],
+  [HTMLMediaElement.prototype, 'playbackRate'],
+  [HTMLMediaElement.prototype, 'src'],
+  [HTMLMediaElement.prototype, 'volume'],
+];
+const lastMediaStateMap: WeakMap<EventTarget, mediaState> = new WeakMap();
+function initMediaObserver(cb: mediaCallback): listenerHandler {
+  function eventHandler(event: Event) {
+    const { target } = event;
+    if (
+      !target ||
+      !(target as Element).tagName ||
+      MEDIA_TAGS.indexOf((target as Element).tagName) < 0 ||
+      isBlocked(target as Node)
+    ) {
+      return;
+    }
+    const mediaEl = (target as HTMLMediaElement);
+    cbWithDedup(target, {
+      paused: mediaEl.paused,
+      currentTime: mediaEl.currentTime,
+      playbackRate: mediaEl.playbackRate,
+      volume: mediaEl.volume,
+    });
+  }
+  function cbWithDedup(target: EventTarget, s: mediaState) {
+    const lastMediaState = lastMediaStateMap.get(target);
+    if (
+      !lastMediaState ||
+      lastMediaState.paused !== s.paused ||
+      lastMediaState.currentTime !== s.currentTime ||
+      lastMediaState.playbackRate !== s.playbackRate ||
+      lastMediaState.volume !== s.volume
+    ) {
+      lastMediaStateMap.set(target, s);
+      const id = mirror.getId(target as INode);
+      cb({
+        ...s,
+        id,
+      });
+    }
+  }
+  const handlers: Array<listenerHandler | hookResetter> = [
+    'waiting',
+    'playing',
+    'play',
+    'pause',
+    'seeked',
+    'ratechange',
+    'volumechange',
+  ].map(eventName => on(eventName, eventHandler));
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(
+    HTMLMediaElement.prototype,
+    'currentTime',
+  );
+  if (propertyDescriptor && propertyDescriptor.set) {
+    handlers.push(
+      ...MEDIA_HOOK_PROPERTIES.map(p =>
         hookSetter<HTMLElement>(p[0], p[1], {
           set() {
             // mock to a normal event
@@ -422,6 +500,7 @@ export default function initObservers(o: observerParam): listenerHandler {
   const scrollHandler = initScrollObserver(o.scrollCb);
   const viewportResizeHandler = initViewportResizeObserver(o.viewportResizeCb);
   const inputHandler = initInputObserver(o.inputCb);
+  const mediaHandler = initMediaObserver(o.mediaCb);
   return () => {
     mutationObserver.disconnect();
     mousemoveHandler();
@@ -429,5 +508,6 @@ export default function initObservers(o: observerParam): listenerHandler {
     scrollHandler();
     viewportResizeHandler();
     inputHandler();
+    mediaHandler();
   };
 }
